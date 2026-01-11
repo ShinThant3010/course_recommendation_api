@@ -21,7 +21,7 @@ class RecommendationResponse(BaseModel):
 
 
 app = FastAPI(
-    title="Agent 4 Internal Recommendation API",
+    title="Course Recommendation API",
     version="0.1.0",
 )
 
