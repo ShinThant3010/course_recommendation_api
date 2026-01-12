@@ -5,8 +5,9 @@ from typing import Any, Dict, List
 from fastapi import FastAPI, Response
 from pydantic import BaseModel, Field
 
-from .service import recommend_courses_by_weakness
-from .models import WeaknessRecommendations, CourseScore, Weakness
+from functions.service import recommend_courses_by_weakness
+from functions.models import WeaknessRecommendations, CourseScore, Weakness
+from functions.utils.json_naming_converter import convert_keys_snake_to_camel
 
 
 class RecommendationRequest(BaseModel):
@@ -36,13 +37,18 @@ def favicon() -> Response:
     return Response(status_code=204)
 
 
-@app.post("/recommendations", response_model=RecommendationResponse)
+@app.post("/v1/course-recommendations", response_model=RecommendationResponse)
 def get_recommendations(request: RecommendationRequest) -> RecommendationResponse:
     results = recommend_courses_by_weakness(
         weaknesses=request.weaknesses,
         max_courses=request.max_courses,
     )
-    return RecommendationResponse(recommendations=_serialize_results(results))
+    serialized = _serialize_results(results)
+    converted = convert_keys_snake_to_camel(
+        serialized,
+        preserve_container_keys={"metadata"},
+    )
+    return RecommendationResponse(recommendations=converted)
 
 
 def _serialize_results(results: List[WeaknessRecommendations]) -> List[Dict[str, Any]]:

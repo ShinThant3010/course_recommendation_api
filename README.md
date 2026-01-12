@@ -12,13 +12,13 @@ Output:
 FastAPI:
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8080
+uvicorn api:app --host 0.0.0.0 --port 8080
 ```
 
 Example:
 
 ```python
-from app import recommend_courses_by_weakness
+from functions import recommend_courses_by_weakness
 
 weaknesses = [
     {"weakness": "Struggles with linear equations", "pattern_type": "numeracy"},
