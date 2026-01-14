@@ -71,9 +71,11 @@ def _build_recommendations(
 def _build_course_score(weakness: Weakness, neighbor: Any) -> CourseScore:
     course_id = str(neighbor.id)
     metadata = get_course_info(course_id)
-    lesson_title = metadata.get("lesson_title") or "Untitled course"
-    desc = metadata.get("description") or ""
-    link = metadata.get("link") or metadata.get("course_url") or ""
+    course_meta = metadata.get("course") if isinstance(metadata, dict) else None
+    source = course_meta if isinstance(course_meta, dict) else metadata
+    lesson_title = source.get("lesson_title") or source.get("lessonTitle") or "Untitled course"
+    desc = source.get("description") or source.get("short_description") or source.get("shortDescription") or ""
+    link = source.get("link") or source.get("course_url") or ""
     course = Course(
         id=course_id,
         lesson_title=lesson_title,

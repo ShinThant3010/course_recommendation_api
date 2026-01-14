@@ -7,8 +7,6 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY functions /app/functions
-COPY _data /app/_data
-
 # Copy source code
 COPY . .
 
