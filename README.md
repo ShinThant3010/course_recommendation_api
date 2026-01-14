@@ -3,8 +3,9 @@
 Small internal Python API that mirrors Agent 4's course-recommendation flow.
 
 Inputs:
-- `weaknesses`: list of dicts (with `weakness` or `text`) or `Weakness` objects
-- `max_courses`: maximum courses per weakness
+- `weaknesses`: list of dicts (with `weakness` or `text`, plus `description`) or `Weakness` objects
+- `max_courses_overall`: maximum courses returned across all weaknesses
+- `max_courses_per_weakness`: maximum courses retrieved per weakness
 
 Output:
 - list of `WeaknessRecommendations` (one per weakness)
@@ -25,7 +26,11 @@ weaknesses = [
     {"weakness": "Misreads inference questions", "pattern_type": "reading_comprehension"},
 ]
 
-results = recommend_courses_by_weakness(weaknesses, max_courses=5)
+results = recommend_courses_by_weakness(
+    weaknesses,
+    max_courses_overall=5,
+    max_courses_per_weakness=3,
+)
 for entry in results:
     print(entry.weakness.text)
     for rec in entry.recommendations:

@@ -26,3 +26,9 @@ _DEFAULT_COURSE_CSV = (
     / "course.csv"
 )
 COURSE_CSV_PATH = Path(os.getenv("COURSE_CSV_PATH", str(_DEFAULT_COURSE_CSV)))
+
+COURSE_INFO_API_BASE_URL = os.getenv(
+    "COURSE_INFO_API_BASE_URL",
+    "https://test-result-data-api-810737581373.asia-southeast1.run.app",
+)
+COURSE_INFO_API_TIMEOUT_SECONDS = float(os.getenv("COURSE_INFO_API_TIMEOUT_SECONDS", "5"))

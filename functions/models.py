@@ -17,8 +17,8 @@ class Course:
 class Weakness:
     id: str
     text: str
+    description: str
     importance: float = 1.0
-    metadata: Dict[str, Any] | None = None
 
 
 @dataclass
