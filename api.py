@@ -95,7 +95,6 @@ def _serialize_weakness(weakness: Weakness) -> Dict[str, Any]:
         "id": weakness.id,
         "text": weakness.text,
         "description": weakness.description,
-        "importance": weakness.importance,
     }
 
 

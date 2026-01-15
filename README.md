@@ -22,8 +22,8 @@ Example:
 from functions import recommend_courses_by_weakness
 
 weaknesses = [
-    {"weakness": "Struggles with linear equations", "pattern_type": "numeracy"},
-    {"weakness": "Misreads inference questions", "pattern_type": "reading_comprehension"},
+    {"weakness": "Struggles with linear equations", "description": "Needs algebra refresh."},
+    {"weakness": "Misreads inference questions", "description": "Has trouble with main-idea questions."},
 ]
 
 results = recommend_courses_by_weakness(

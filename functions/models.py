@@ -18,7 +18,6 @@ class Weakness:
     id: str
     text: str
     description: str
-    importance: float = 1.0
 
 
 @dataclass

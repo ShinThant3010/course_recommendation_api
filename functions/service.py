@@ -54,13 +54,11 @@ def _normalize_weaknesses(
             raise ValueError("Each weakness must include a 'weakness' or 'text' field.")
         description = item.get("description") or ""
         weakness_id = item.get("id") or str(uuid.uuid4())
-        importance = float(item.get("importance", 1.0))
         parsed.append(
             Weakness(
                 id=weakness_id,
                 text=weakness_text,
                 description=description,
-                importance=importance,
             )
         )
     return parsed
