@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 from typing import Any, Dict, List, Tuple
 
 from google.cloud import aiplatform
@@ -19,6 +20,7 @@ from .config import (
 )
 from .models import Course, CourseScore, Weakness
 from .utils.course_info_client import get_course_info
+from .utils.token_log import log_token_usage
 
 # Initialize Vertex AI once for the internal API module.
 vertexai.init(project=DEFAULT_PROJECT_ID, location=DEFAULT_LOCATION)
@@ -63,7 +65,15 @@ def _build_recommendations(
     weakness: Weakness,
     max_courses_per_weakness: int,
 ) -> Tuple[str, List[CourseScore]]:
+    start = time.time()
     neighbors = _query_vertex_index(weakness.text, max_courses_per_weakness)
+    elapsed = time.time() - start
+    log_token_usage(
+        usage=f"vector_search: {weakness.id}",
+        input_tokens=None,
+        output_tokens=None,
+        runtime_seconds=elapsed,
+    )
     recs = [_build_course_score(weakness, neighbor) for neighbor in neighbors]
     return weakness.id, _dedupe_by_course(recs)
 
@@ -109,6 +119,7 @@ def _query_vertex_index(query_text: str, limit: int) -> List[Any]:
 
     endpoint = MatchingEngineIndexEndpoint(index_endpoint_name=endpoint_name)
     query_vector = _embed_texts([query_text])[0]
+    print("deployed index id: ", DEPLOYED_INDEX_ID)
     neighbors = endpoint.find_neighbors(
         deployed_index_id=DEPLOYED_INDEX_ID,
         queries=[query_vector],
