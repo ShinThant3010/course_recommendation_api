@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import uuid
 from typing import Any, Dict, Iterable, List
 
 from .config import GENERATION_MODEL
 from .models import CourseScore, Weakness, WeaknessRecommendations
-from .recommendation_fetch import fetch_recommendations_by_weakness, flatten_recommendations
-from .rerank import llm_rerank_courses
+from .recommendation_fetch import fetch_recommendations_for_weakness
+from .rerank import llm_rerank_for_weakness
 
 
 def recommend_courses_by_weakness(
@@ -25,32 +26,18 @@ def recommend_courses_by_weakness(
     if max_courses_per_weakness < 1:
         raise ValueError("max_courses_per_weakness must be >= 1.")
 
-    # Normalize weaknesses
     parsed_weaknesses = _normalize_weaknesses(weaknesses)
-
-    # Fetch initial recommendations
-    recs_by_weakness = fetch_recommendations_by_weakness(parsed_weaknesses, max_courses_per_weakness)
-    
-    # Flatten recommendations
-    all_recs = flatten_recommendations(parsed_weaknesses, recs_by_weakness)
-
-    # Rerank recommendations using LLM
-    reranked = llm_rerank_courses(
+    recs_by_weakness = _recommend_by_weakness(
         parsed_weaknesses,
-        all_recs,
-        model=GENERATION_MODEL,
-        max_candidates_per_weakness=max_courses_per_weakness,
+        max_courses_per_weakness,
     )
+    all_recs: List[CourseScore] = []
+    for weakness in parsed_weaknesses:
+        all_recs.extend(recs_by_weakness.get(weakness.id, []))
 
-    # Determine base recommendations to use
-    base_recs = reranked if reranked else all_recs
-    
-    # Deduplicate and cap overall recommendations
-    deduped = _dedupe_by_best_score(base_recs)
+    deduped = _dedupe_by_best_score(all_recs)
     deduped.sort(key=lambda r: r.score, reverse=True)
     capped = deduped[:max_courses_overall]
-    
-    # Rebuild results grouped by weakness; apply per-weakness cap
     return _rebuild_results(parsed_weaknesses, capped, max_courses_per_weakness)
 
 
@@ -79,8 +66,47 @@ def _normalize_weaknesses(
     return parsed
 
 
-def _rebuild_results(weaknesses: List[Weakness], recommendations: List[CourseScore], max_courses_per_weakness: int) -> List[WeaknessRecommendations]:
-    
+def _recommend_by_weakness(
+    weaknesses: List[Weakness],
+    max_courses_per_weakness: int,
+) -> Dict[str, List[CourseScore]]:
+    if not weaknesses:
+        return {}
+
+    max_workers = min(8, len(weaknesses))
+    if max_workers <= 1:
+        return {
+            weakness.id: _recommend_for_weakness(weakness, max_courses_per_weakness)
+            for weakness in weaknesses
+        }
+
+    recs_by_weakness: Dict[str, List[CourseScore]] = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {
+            executor.submit(_recommend_for_weakness, weakness, max_courses_per_weakness): weakness.id
+            for weakness in weaknesses
+        }
+        for future in as_completed(future_map):
+            wid = future_map[future]
+            recs_by_weakness[wid] = future.result()
+    return recs_by_weakness
+
+
+def _recommend_for_weakness(
+    weakness: Weakness,
+    max_courses_per_weakness: int,
+) -> List[CourseScore]:
+    recs = fetch_recommendations_for_weakness(weakness, max_courses_per_weakness)
+    reranked = llm_rerank_for_weakness(weakness, recs, model=GENERATION_MODEL)
+    reranked.sort(key=lambda r: r.score, reverse=True)
+    return reranked
+
+
+def _rebuild_results(
+    weaknesses: List[Weakness],
+    recommendations: List[CourseScore],
+    max_courses_per_weakness: int,
+) -> List[WeaknessRecommendations]:
     recs_by_weakness: Dict[str, List[CourseScore]] = {}
     for rec in recommendations:
         recs_by_weakness.setdefault(rec.weakness_id, []).append(rec)
@@ -88,7 +114,6 @@ def _rebuild_results(weaknesses: List[Weakness], recommendations: List[CourseSco
     results: List[WeaknessRecommendations] = []
     for weakness in weaknesses:
         recs = recs_by_weakness.get(weakness.id, [])
-        recs.sort(key=lambda r: r.score, reverse=True)
         results.append(
             WeaknessRecommendations(
                 weakness=weakness,

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 import time
-from typing import Any, Dict, List, Tuple
+from typing import Any, List
 
 from google.cloud import aiplatform
 from google.cloud.aiplatform import MatchingEngineIndexEndpoint
@@ -25,46 +25,14 @@ from .utils.token_log import log_token_usage
 # Initialize Vertex AI once for the internal API module.
 vertexai.init(project=DEFAULT_PROJECT_ID, location=DEFAULT_LOCATION)
 aiplatform.init(project=DEFAULT_PROJECT_ID, location=DEFAULT_LOCATION)
+_ENDPOINT: MatchingEngineIndexEndpoint | None = None
+_ENDPOINT_LOCK = threading.Lock()
 
 
-def fetch_recommendations_by_weakness(
-    weaknesses: List[Weakness],
-    max_courses_per_weakness: int,
-) -> Dict[str, List[CourseScore]]:
-    recs_by_weakness: Dict[str, List[CourseScore]] = {}
-
-    max_workers = min(8, len(weaknesses)) if weaknesses else 0
-    if max_workers <= 1:
-        for weakness in weaknesses:
-            wid, recs = _build_recommendations(weakness, max_courses_per_weakness)
-            recs_by_weakness[wid] = recs
-        return recs_by_weakness
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_map = {
-            executor.submit(_build_recommendations, weakness, max_courses_per_weakness): weakness.id
-            for weakness in weaknesses
-        }
-        for future in as_completed(future_map):
-            wid, recs = future.result()
-            recs_by_weakness[wid] = recs
-    return recs_by_weakness
-
-
-def flatten_recommendations(
-    weaknesses: List[Weakness],
-    recs_by_weakness: Dict[str, List[CourseScore]],
-) -> List[CourseScore]:
-    all_recs: List[CourseScore] = []
-    for weakness in weaknesses:
-        all_recs.extend(recs_by_weakness.get(weakness.id, []))
-    return all_recs
-
-
-def _build_recommendations(
+def fetch_recommendations_for_weakness(
     weakness: Weakness,
     max_courses_per_weakness: int,
-) -> Tuple[str, List[CourseScore]]:
+) -> List[CourseScore]:
     start = time.time()
     neighbors = _query_vertex_index(weakness.text, max_courses_per_weakness)
     elapsed = time.time() - start
@@ -75,7 +43,7 @@ def _build_recommendations(
         runtime_seconds=elapsed,
     )
     recs = [_build_course_score(weakness, neighbor) for neighbor in neighbors]
-    return weakness.id, _dedupe_by_course(recs)
+    return _dedupe_by_course(recs)
 
 
 def _build_course_score(weakness: Weakness, neighbor: Any) -> CourseScore:
@@ -105,21 +73,8 @@ def _build_course_score(weakness: Weakness, neighbor: Any) -> CourseScore:
 
 
 def _query_vertex_index(query_text: str, limit: int) -> List[Any]:
-    endpoints = aiplatform.MatchingEngineIndexEndpoint.list()
-    endpoint_name = ""
-    for ep in endpoints:
-        if ep.display_name == ENDPOINT_DISPLAY_NAME:
-            endpoint_name = ep.resource_name
-            break
-
-    if not endpoint_name:
-        raise ValueError(
-            f"Matching Engine endpoint with display name '{ENDPOINT_DISPLAY_NAME}' not found."
-        )
-
-    endpoint = MatchingEngineIndexEndpoint(index_endpoint_name=endpoint_name)
+    endpoint = _get_endpoint()
     query_vector = _embed_texts([query_text])[0]
-    print("deployed index id: ", DEPLOYED_INDEX_ID)
     neighbors = endpoint.find_neighbors(
         deployed_index_id=DEPLOYED_INDEX_ID,
         queries=[query_vector],
@@ -127,6 +82,29 @@ def _query_vertex_index(query_text: str, limit: int) -> List[Any]:
         return_full_datapoint=False,
     )
     return neighbors[0] if neighbors else []
+
+
+def _get_endpoint() -> MatchingEngineIndexEndpoint:
+    global _ENDPOINT
+    if _ENDPOINT is not None:
+        return _ENDPOINT
+
+    with _ENDPOINT_LOCK:
+        if _ENDPOINT is not None:
+            return _ENDPOINT
+        endpoints = aiplatform.MatchingEngineIndexEndpoint.list()
+        endpoint_name = ""
+        for ep in endpoints:
+            if ep.display_name == ENDPOINT_DISPLAY_NAME:
+                endpoint_name = ep.resource_name
+                break
+
+        if not endpoint_name:
+            raise ValueError(
+                f"Matching Engine endpoint with display name '{ENDPOINT_DISPLAY_NAME}' not found."
+            )
+        _ENDPOINT = MatchingEngineIndexEndpoint(index_endpoint_name=endpoint_name)
+        return _ENDPOINT
 
 
 def _embed_texts(texts: List[str], dim: int = EMBEDDING_DIMENSION) -> List[List[float]]:
