@@ -75,6 +75,12 @@ def _build_rerank_prompt(weakness_text: str, recommendations: List[CourseScore])
     return f"""
         You are scoring courses for a single weakness.
 
+        DOMAIN RULE:
+        - If the weakness clearly indicates a domain (e.g., music theory, English listening, SQL queries),
+          the courses MUST be highly correlated to that same domain to receive a high score.
+        - If a course is clearly out-of-domain, assign a very low score (0.0-0.2).
+        - If the weakness does NOT clearly indicate a domain, score based on general relevance only.
+
         Weakness:
         "{weakness_text}"
 
